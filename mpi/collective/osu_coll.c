@@ -143,6 +143,28 @@ set_num_iterations (int value)
 }
 
 static int
+set_num_comms (int value)
+{
+    int temp;
+
+    if (value < MIN_NUM_COMMS || value > MAX_NUM_COMMS) {
+        return -1;
+    }
+
+    /* judge power of two */
+    temp = value;
+    while (((temp % 2) == 0) && temp > 1)
+        temp /= 2;
+
+    if (temp != 1)
+        return -1;
+
+    options.num_comms = value;
+
+    return 0;
+}
+
+static int
 set_device_array_size (int value)
 {
     if (value < 1 ) {
@@ -204,12 +226,12 @@ process_options (int argc, char *argv[])
     extern char * optarg;
     extern int optind, optopt;
 
-    char const * optstring = "+:hvfm:i:x:M:t:s:";
+    char const * optstring = "+:hvfm:i:x:M:t:s:c:";
     int c;
 
     if (accel_enabled) {
-        optstring = (CUDA_KERNEL_ENABLED) ? "+:d:hvfm:i:x:M:t:r:s:"
-            : "+:d:hvfm:i:x:M:t:s:";
+        optstring = (CUDA_KERNEL_ENABLED) ? "+:d:hvfm:i:x:M:t:r:s:c:"
+            : "+:d:hvfm:i:x:M:t:s:c:";
     }
 
     /*
@@ -228,6 +250,7 @@ process_options (int argc, char *argv[])
     options.iterations_large = 100;
     options.skip = 200;
     options.skip_large = 10;
+    options.num_comms = MIN_NUM_COMMS;
 
     while ((c = getopt(argc, argv, optstring)) != -1) {
         bad_usage.opt = c;
@@ -355,6 +378,14 @@ process_options (int argc, char *argv[])
                     return po_bad_usage;
                 }
                  break;
+            case 'c':
+                if (set_num_comms(atoi(optarg))) {
+                    bad_usage.message = "Invalid Number of Communicators";
+                    bad_usage.optarg = optarg;
+
+                    return po_bad_usage;
+                }
+                break;
             case ':':
                 bad_usage.message = "Option Missing Required Argument";
                 bad_usage.opt = optopt;
@@ -420,6 +451,9 @@ print_help_message (int rank)
     
     printf("  -t CALLS      set the number of MPI_Test() calls during the dummy computation, \n");
     printf("                set CALLS to 100, 1000, or any number > 0.\n");
+
+    printf("  -c COMMS      set the number of communicators used in collectives.\n");
+    printf("                value must be power of 2. minimum is %d (default), maximum is %d.\n", MIN_NUM_COMMS, MAX_NUM_COMMS);
 
     if (CUDA_KERNEL_ENABLED) {
         printf("  -r TARGET     set the compute target for dummy computation\n");
@@ -694,13 +728,16 @@ print_stats_new (int rank, int size, double avg_time, double min_time, double
     }
 
     if (options.show_full) {
-        fprintf(stdout, "%*.*f%*.*f%*.*f     {%*.*f, %*.*f, %*.*f}  %*lu\n", 
+        //fprintf(stdout, "%*.*f%*.*f%*.*f     {%*.*f,%*.*f,%*.*f}  %*lu\n", 
+        fprintf(stdout, "%*.*f%*.*f%*.*f     {%*.*f,%*.*f,%*.*f,%*.*f,%*.*f}  %*lu\n", 
                 FIELD_WIDTH, FLOAT_PRECISION, min_time,
                 FIELD_WIDTH, FLOAT_PRECISION, max_time,
                 FIELD_WIDTH, FLOAT_PRECISION, stddev,
-		5, 2, quartiles[0],
-		5, 2, quartiles[1],
-		5, 2, quartiles[2],
+		4, 2, quartiles[0],
+		4, 2, quartiles[1],
+		4, 2, quartiles[2],
+		4, 2, quartiles[3],
+		4, 2, quartiles[4],
                 12, options.iterations);
     }
 
@@ -1230,25 +1267,30 @@ void calc_data_quatiles(double *all_iter_time, int iterations, int comm_size, do
    }
 
     min_time = sort_data[0] * 1e6;
-    quartiles[0] = sort_data[total_count / 4] * 1e6;
-    quartiles[1] = sort_data[total_count / 2] * 1e6;
-    quartiles[2] = sort_data[total_count * 3 / 4] * 1e6;
+    quartiles[0] = sort_data[0] * 1e6;
+    quartiles[1] = sort_data[total_count / 4] * 1e6;
+    quartiles[2] = sort_data[total_count / 2] * 1e6;
+    quartiles[3] = sort_data[total_count * 3 / 4] * 1e6;
+    quartiles[4] = sort_data[total_count-1] * 1e6;
     max_time = sort_data[total_count-1] * 1e6;
 
-  //  printf ("min:%4.2f  Q1: %4.2f Q2: %4.2f Q3: %4.2f max: %4.2f\n", min_time, quartiles[0], quartiles[1], quartiles[2], max_time);
+    //printf ("min:%4.2f  Q1: %4.2f Q2: %4.2f Q3: %4.2f max: %4.2f\n", min_time, quartiles[0], quartiles[1], quartiles[2], max_time);
 
     free(sort_data);
 }
 
-void __attribute__((unused)) print_coll_iterations_perf_data(double *iter_time, int rank, int comm_size,
+void __attribute__((unused)) print_coll_iterations_perf_data(double *iter_time, MPI_Comm comm,
                                                             int data_size, int iterations, double *stddev,
 							    double *quartiles, FILE *log_file)
 {
-    int i, j, k, max_cutoff, show_all_iters = 0;
+    int i, j, k, max_cutoff, show_all_iters = 0, rank, comm_size;
     double avg_time = 0.0, max_time = 0.0, min_time = 0.0, timer = 0.0;
     double *sum_time = NULL, max_iter_time, min_iter_time, latency, *all_iter_time;
     char *max_cutoffs = NULL, *endptr = NULL, *saveptr = NULL, *str = NULL;
     double average = 0.0, deviation = 0.0, devsqr_sum = 0.0, variance = 0.0;
+
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &comm_size);
 
     if (rank == 0) {
        all_iter_time = (double *) malloc(sizeof(double) * iterations * comm_size);
@@ -1259,7 +1301,7 @@ void __attribute__((unused)) print_coll_iterations_perf_data(double *iter_time, 
     }
 
     MPI_Gather(iter_time, iterations, MPI_DOUBLE,
-              all_iter_time, iterations, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+              all_iter_time, iterations, MPI_DOUBLE, 0, comm);
 
     if (rank) return;
 
@@ -1288,6 +1330,8 @@ void __attribute__((unused)) print_coll_iterations_perf_data(double *iter_time, 
 
     if (getenv("SHOW_ALL_ITERS")) {
 	show_all_iters = 1;
+    } else {
+	return;
     }
 
     if (getenv("MAX_CUTOFF_LIST"))

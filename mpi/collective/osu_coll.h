@@ -78,6 +78,9 @@
 #   define FLOAT_PRECISION 2
 #endif
 
+#define MIN_NUM_COMMS 1
+#define MAX_NUM_COMMS 16
+
 static int is_alloc = 1;
 static int iterations = 1000;
 static int iterations_large = 100;
@@ -98,7 +101,7 @@ calculate_and_print_stats(int rank, int size, int numprocs,
                           double test_time, double cpu_time,
                           double wait_time, double init_time);
 
-void print_coll_iterations_perf_data(double *all_iter_time, int rank, int comm_size,
+void print_coll_iterations_perf_data(double *all_iter_time, MPI_Comm,
                                                             int data_size, int iterations,
 							    double *stddev, double *quartiles, 
 							    FILE *log_file);
@@ -313,6 +316,7 @@ struct options_t {
     size_t skip_large;
     int num_probes;
     int device_array_size;
+    int num_comms;
 };
 
 extern struct options_t options;
