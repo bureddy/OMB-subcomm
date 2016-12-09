@@ -1159,4 +1159,99 @@ allocate_device_arrays(int n)
     cudaMemset(d_y, 2.0f, n);
 }
 #endif
+
+void __attribute__((unused)) print_coll_iterations_perf_data(double *iter_time, int rank, int comm_size,
+                                                            int data_size, int iterations)
+{
+    int i, j, k, max_cutoff ;
+    double avg_time = 0.0, max_time = 0.0, min_time = 0.0, timer = 0.0;
+    double *sum_time = NULL, max_iter_time, min_iter_time, latency, *all_iter_time;
+    char *max_cutoffs = NULL, *endptr = NULL, *saveptr = NULL, *str = NULL;
+
+    if (rank == 0) {
+       all_iter_time = (double *) malloc(sizeof(double) * iterations * comm_size);
+       if (!all_iter_time) {
+           fprintf(stderr, "Failed to allocate \n");
+           goto fn_fail;
+       }
+    }
+
+    MPI_Gather(iter_time, iterations, MPI_DOUBLE,
+              all_iter_time, iterations, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    if (rank) return;
+
+    if (getenv("MAX_CUTOFF_LIST"))
+       max_cutoffs= strdup(getenv("MAX_CUTOFF_LIST"));
+    else
+       max_cutoffs = strdup("10");
+
+    if (!max_cutoffs)
+       goto fn_fail;
+
+    sum_time = (double *) malloc(sizeof(double) * comm_size);
+    if (!sum_time)
+       goto fn_fail;
+
+    saveptr = str = strdup(max_cutoffs);
+    for (endptr = strtok_r (str,",", &saveptr); endptr; endptr = strtok_r (NULL, ",", &saveptr)) {
+       max_cutoff = atoi(endptr);
+
+       for (j = 0; j < comm_size; j++)
+           sum_time[j] = 0.0;
+       k = 0;
+       max_time = 0.0;
+       min_time = 10000.0;
+       for (i = 0; i < iterations; i++) {
+           max_iter_time = 0.0;
+           min_iter_time = 10000.0;
+           for (j = 0; j < comm_size; j++) {
+               latency = (double)(all_iter_time[i + (j*iterations)] * 1e6);
+               if (latency > max_iter_time)
+                   max_iter_time = latency;
+               if (latency < min_iter_time)
+                   min_iter_time = latency;
+           }
+           if (max_iter_time > max_cutoff) continue;
+           if (max_iter_time > max_time) max_time = max_iter_time;
+           if (min_iter_time < min_time) min_time = min_iter_time;
+
+           for (j = 0; j < comm_size; j++) {
+               sum_time[j] += (double)(all_iter_time[i + (j*iterations)]);
+           }
+           k++;
+       }
+       if (k == 0)
+           continue;
+
+       timer=0.0;
+       for (j = 0; j < comm_size; j++)
+           timer += sum_time[j];
+       avg_time =  (double)(timer * 1e6) / (comm_size * k);
+       if (data_size < 0)
+           fprintf(stdout, "%10.2f %10.2f  %10.2f %10d  %10d\n", avg_time, min_time, max_time, k, max_cutoff);
+       else
+           fprintf(stdout, "%15d %10.2f %10.2f  %10.2f %10d  %10d\n", data_size,
+                   avg_time, min_time, max_time, k, max_cutoff);
+    }
+#if 0
+    fprintf(stdout, "Rank  ");
+    for (j = 0; j < comm_size; j++)
+       fprintf(stdout, "%8d", j);
+    for (i = 0; i < iterations; i++) {
+       fprintf(stdout, "\nIter:%d", i);
+       for (j = 0; j < comm_size; j++) {
+           fprintf(stdout, "%8.2f",
+                   (double)(all_iter_time[i + (j*iterations)] * 1e6));
+       }
+    }
+#endif
+    fprintf(stdout, "\n");
+fn_fail:
+    free(str);
+    free(max_cutoffs);
+    free(sum_time);
+}
+
+
 /* vi:set sw=4 sts=4 tw=80: */

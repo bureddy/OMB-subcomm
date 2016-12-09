@@ -85,6 +85,8 @@ int main(int argc, char *argv[])
 
     latency = (timer * 1e6) / options.iterations;
 
+  //  if (rank == 0) { int k= 1; while(k);}
+
     MPI_Reduce(&latency, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0,
                 MPI_COMM_WORLD);
     MPI_Reduce(&latency, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0,

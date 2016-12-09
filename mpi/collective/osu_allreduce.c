@@ -12,9 +12,9 @@
 
 int main(int argc, char *argv[])
 {
-    int i, numprocs, rank, size;
+    int i, j, numprocs, rank, size;
     double latency = 0.0, t_start = 0.0, t_stop = 0.0;
-    double timer=0.0;
+    double timer=0.0, *iter_time;
     double avg_time = 0.0, max_time = 0.0, min_time = 0.0;
     float *sendbuf, *recvbuf;
     int po_ret;
@@ -85,6 +85,12 @@ int main(int argc, char *argv[])
     }
     set_buffer(recvbuf, options.accel, 0, bufsize);
 
+    iter_time = (double *) malloc(sizeof(double) * options.iterations);
+    if (!iter_time) {
+       fprintf(stderr, "Failed to allocate \n");
+        MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+    }
+
     print_preamble(rank);
 
     for(size=options.min_message_size; size*sizeof(float) <= options.max_message_size; size *= 2) {
@@ -97,13 +103,14 @@ int main(int argc, char *argv[])
         MPI_Barrier(MPI_COMM_WORLD);
 
         timer=0.0;
-        for(i=0; i < options.iterations + options.skip ; i++) {
+        for(i=0, j= 0; i < options.iterations + options.skip ; i++) {
             t_start = MPI_Wtime();
             MPI_Allreduce(sendbuf, recvbuf, size, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD );
             t_stop=MPI_Wtime();
             if(i>=options.skip){
 
-            timer+=t_stop-t_start;
+               timer+=t_stop-t_start;
+               iter_time[j++] = (t_stop - t_start);
             }
             MPI_Barrier(MPI_COMM_WORLD);
         }
@@ -118,6 +125,10 @@ int main(int argc, char *argv[])
         avg_time = avg_time/numprocs;
 
         print_stats(rank, size * sizeof(float), avg_time, min_time, max_time);
+#if 1
+       print_coll_iterations_perf_data(iter_time, rank, numprocs, (int )(size * sizeof(float)), options.iterations);
+#endif
+
         MPI_Barrier(MPI_COMM_WORLD);
     }
 

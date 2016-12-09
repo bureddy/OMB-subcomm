@@ -98,6 +98,9 @@ calculate_and_print_stats(int rank, int size, int numprocs,
                           double test_time, double cpu_time,
                           double wait_time, double init_time);
 
+void print_coll_iterations_perf_data(double *all_iter_time, int rank, int comm_size,
+                                                            int data_size, int iterations);
+
 static void print_usage(int rank, const char * prog, int has_size)
 {
     if (rank!=0) 
