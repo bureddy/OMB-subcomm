@@ -15,10 +15,12 @@ int main(int argc, char *argv[])
     int i, j, numprocs, rank, size;
     double latency = 0.0, t_start = 0.0, t_stop = 0.0;
     double timer=0.0, *iter_time;
-    double avg_time = 0.0, max_time = 0.0, min_time = 0.0;
+    double avg_time = 0.0, max_time = 0.0, min_time = 0.0, stddev= 0.0;
     float *sendbuf, *recvbuf;
     int po_ret;
     size_t bufsize;
+    FILE *log_file = stdout;
+    char *str;
 
     set_header(HEADER);
     set_benchmark_name("osu_allreduce");
@@ -30,6 +32,10 @@ int main(int argc, char *argv[])
             fprintf(stderr, "Error initializing device\n");
             exit(EXIT_FAILURE);
         }
+    }
+
+    if ((str = getenv("LOG_FILE")) != NULL) {
+	    log_file = fopen(str, "w");
     }
 
     MPI_Init(&argc, &argv);
@@ -61,6 +67,7 @@ int main(int argc, char *argv[])
         MPI_Finalize();
         exit(EXIT_FAILURE);
     }
+    
 
     if (options.max_message_size > options.max_mem_limit) {
         options.max_message_size = options.max_mem_limit;
@@ -124,10 +131,11 @@ int main(int argc, char *argv[])
                 MPI_COMM_WORLD);
         avg_time = avg_time/numprocs;
 
-        print_stats(rank, size * sizeof(float), avg_time, min_time, max_time);
 #if 1
-       print_coll_iterations_perf_data(iter_time, rank, numprocs, (int )(size * sizeof(float)), options.iterations);
+       print_coll_iterations_perf_data(iter_time, rank, numprocs, (int )(size * sizeof(float)), options.iterations, &stddev, log_file);
 #endif
+
+        print_stats_with_stddev(rank, size * sizeof(float), avg_time, min_time, max_time, stddev);
 
         MPI_Barrier(MPI_COMM_WORLD);
     }
@@ -136,6 +144,10 @@ int main(int argc, char *argv[])
     free_buffer(recvbuf, options.accel);
 
     MPI_Finalize();
+
+    if (log_file != stdout) {
+	    fclose(log_file);
+    }
 
     if (none != options.accel) {
         if (cleanup_accel()) {

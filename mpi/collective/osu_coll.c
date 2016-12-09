@@ -560,6 +560,7 @@ print_preamble (int rank)
     if (options.show_full) {
         fprintf(stdout, "%*s", FIELD_WIDTH, "Min Latency(us)");
         fprintf(stdout, "%*s", FIELD_WIDTH, "Max Latency(us)");
+        fprintf(stdout, "%*s", FIELD_WIDTH, "STD DEV(us)");
         fprintf(stdout, "%*s\n", 12, "Iterations");
     }
 
@@ -671,6 +672,36 @@ print_stats_nbc (int rank, int size, double overall_time,
         fprintf(stdout, "%*.*f", FIELD_WIDTH, FLOAT_PRECISION, (cpu_time - test_time));
         fprintf(stdout, "%*.*f", FIELD_WIDTH, FLOAT_PRECISION, comm_time);
         fprintf(stdout, "%*.*f\n", FIELD_WIDTH, FLOAT_PRECISION, overlap);
+    }
+
+    fflush(stdout);
+}
+
+void
+print_stats_with_stddev (int rank, int size, double avg_time, double min_time, double
+        max_time, double stddev)
+{
+    if (rank) return;
+
+    if (options.show_size) {
+        fprintf(stdout, "%-*d", 10, size);
+        fprintf(stdout, "%*.*f", FIELD_WIDTH, FLOAT_PRECISION, avg_time);
+    }
+
+    else {
+        fprintf(stdout, "%*.*f", 17, FLOAT_PRECISION, avg_time);
+    }
+
+    if (options.show_full) {
+        fprintf(stdout, "%*.*f%*.*f%*.*f%*lu\n", 
+                FIELD_WIDTH, FLOAT_PRECISION, min_time,
+                FIELD_WIDTH, FLOAT_PRECISION, max_time,
+                FIELD_WIDTH, FLOAT_PRECISION, stddev,
+                12, options.iterations);
+    }
+
+    else {
+        fprintf(stdout, "\n");
     }
 
     fflush(stdout);
@@ -1161,12 +1192,14 @@ allocate_device_arrays(int n)
 #endif
 
 void __attribute__((unused)) print_coll_iterations_perf_data(double *iter_time, int rank, int comm_size,
-                                                            int data_size, int iterations)
+                                                            int data_size, int iterations, double *stddev, FILE *log_file)
 {
-    int i, j, k, max_cutoff ;
+    int i, j, k, max_cutoff, show_all_iters = 0;
     double avg_time = 0.0, max_time = 0.0, min_time = 0.0, timer = 0.0;
     double *sum_time = NULL, max_iter_time, min_iter_time, latency, *all_iter_time;
     char *max_cutoffs = NULL, *endptr = NULL, *saveptr = NULL, *str = NULL;
+    double average = 0.0, deviation = 0.0, devsqr_sum = 0.0, variance = 0.0;
+
 
     if (rank == 0) {
        all_iter_time = (double *) malloc(sizeof(double) * iterations * comm_size);
@@ -1180,6 +1213,31 @@ void __attribute__((unused)) print_coll_iterations_perf_data(double *iter_time, 
               all_iter_time, iterations, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     if (rank) return;
+
+    /* find standard deaviation */
+
+    for (i = 0; i < iterations; i++) {
+	for (j = 0; j < comm_size; j++) {
+	    average += (double)(all_iter_time[i+ (j * iterations)] * 1e6);
+	}
+    }
+
+    average = average/(double)(iterations * comm_size);
+
+    for (i = 0; i < iterations; i++) {
+	for (j = 0; j < comm_size; j++) {
+	    deviation = ((all_iter_time[i+ (j * iterations)] * 1e6)- average);
+	    devsqr_sum += (deviation * deviation);
+	}
+    }
+    variance = devsqr_sum / (double)(iterations * comm_size);
+
+    *stddev = sqrt(variance);
+    //printf("average :%8.4f variance :%8.4f stddev:%8.4f\n", average, variance, *stddev);
+
+    if (getenv("SHOW_ALL_ITERS")) {
+	show_all_iters = 1;
+    }
 
     if (getenv("MAX_CUTOFF_LIST"))
        max_cutoffs= strdup(getenv("MAX_CUTOFF_LIST"));
@@ -1228,25 +1286,27 @@ void __attribute__((unused)) print_coll_iterations_perf_data(double *iter_time, 
        for (j = 0; j < comm_size; j++)
            timer += sum_time[j];
        avg_time =  (double)(timer * 1e6) / (comm_size * k);
+#if 0
        if (data_size < 0)
            fprintf(stdout, "%10.2f %10.2f  %10.2f %10d  %10d\n", avg_time, min_time, max_time, k, max_cutoff);
        else
            fprintf(stdout, "%15d %10.2f %10.2f  %10.2f %10d  %10d\n", data_size,
                    avg_time, min_time, max_time, k, max_cutoff);
-    }
-#if 0
-    fprintf(stdout, "Rank  ");
-    for (j = 0; j < comm_size; j++)
-       fprintf(stdout, "%8d", j);
-    for (i = 0; i < iterations; i++) {
-       fprintf(stdout, "\nIter:%d", i);
-       for (j = 0; j < comm_size; j++) {
-           fprintf(stdout, "%8.2f",
-                   (double)(all_iter_time[i + (j*iterations)] * 1e6));
-       }
-    }
 #endif
-    fprintf(stdout, "\n");
+    }
+    if (show_all_iters) {
+	fprintf(log_file, "Rank  ");
+	for (j = 0; j < comm_size; j++)
+	    fprintf(log_file, "%8d", j);
+	for (i = 0; i < iterations; i++) {
+	    fprintf(log_file, "\nIter:%d", i);
+	    for (j = 0; j < comm_size; j++) {
+		fprintf(log_file, "%8.2f",
+			(double)(all_iter_time[i + (j*iterations)] * 1e6));
+	    }
+	}
+    }
+    fprintf(log_file, "\n");
 fn_fail:
     free(str);
     free(max_cutoffs);

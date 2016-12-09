@@ -99,7 +99,8 @@ calculate_and_print_stats(int rank, int size, int numprocs,
                           double wait_time, double init_time);
 
 void print_coll_iterations_perf_data(double *all_iter_time, int rank, int comm_size,
-                                                            int data_size, int iterations);
+                                                            int data_size, int iterations,
+							    double *stddev, FILE *log_file);
 
 static void print_usage(int rank, const char * prog, int has_size)
 {
@@ -343,6 +344,7 @@ void print_version_message (int rank);
 void print_preamble (int rank);
 void print_preamble_nbc (int rank);
 void print_stats (int rank, int size, double avg, double min, double max);
+void print_stats_with_stddev (int rank, int size, double avg, double min, double max, double std_dev);
 void print_stats_nbc (int rank, int size, double ovrl, double cpu, double comm, 
 		      			  double wait, double init, double test);
 /*
