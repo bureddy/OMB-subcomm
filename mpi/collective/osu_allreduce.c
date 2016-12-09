@@ -15,7 +15,7 @@ int main(int argc, char *argv[])
     int i, j, numprocs, rank, size;
     double latency = 0.0, t_start = 0.0, t_stop = 0.0;
     double timer=0.0, *iter_time;
-    double avg_time = 0.0, max_time = 0.0, min_time = 0.0, stddev= 0.0;
+    double avg_time = 0.0, max_time = 0.0, min_time = 0.0, stddev= 0.0, quartiles[3];
     float *sendbuf, *recvbuf;
     int po_ret;
     size_t bufsize;
@@ -132,10 +132,10 @@ int main(int argc, char *argv[])
         avg_time = avg_time/numprocs;
 
 #if 1
-       print_coll_iterations_perf_data(iter_time, rank, numprocs, (int )(size * sizeof(float)), options.iterations, &stddev, log_file);
+       print_coll_iterations_perf_data(iter_time, rank, numprocs, (int )(size * sizeof(float)), options.iterations, &stddev, quartiles, log_file);
 #endif
 
-        print_stats_with_stddev(rank, size * sizeof(float), avg_time, min_time, max_time, stddev);
+        print_stats_new(rank, size * sizeof(float), avg_time, min_time, max_time, stddev, quartiles);
 
         MPI_Barrier(MPI_COMM_WORLD);
     }
