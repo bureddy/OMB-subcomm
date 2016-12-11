@@ -113,11 +113,13 @@ int main(int argc, char *argv[])
 	}
 
 #if 0
-	MPI_Comm_split(MPI_COMM_WORLD, rank / (numprocs / options.num_comms), rank, &sub_comm);
+	//MPI_Comm_split(MPI_COMM_WORLD, rank / (numprocs / options.num_comms), rank, &sub_comm);
+	MPI_Comm_split(MPI_COMM_WORLD, rank % options.num_comms, rank, &sub_comm);
 #else
 	sub_numprocs = numprocs / options.num_comms;
 	for (i = 0; i < options.num_comms; i++) {
-		color = ((rank >= (i * sub_numprocs)) && (rank < ( (i+1) * sub_numprocs))) ? i : MPI_UNDEFINED;
+//		color = ((rank >= (i * sub_numprocs)) && (rank < ( (i+1) * sub_numprocs))) ? i : MPI_UNDEFINED;
+		color = (rank % options.num_comms == i) ? i : MPI_UNDEFINED;
 		MPI_Comm_split(MPI_COMM_WORLD, color, rank, &tmp_comm);
 		if (tmp_comm != MPI_COMM_NULL)
 			sub_comm = tmp_comm;
@@ -150,6 +152,8 @@ int main(int argc, char *argv[])
         }
 
         MPI_Barrier(MPI_COMM_WORLD);
+	if (sub_comm !=  MPI_COMM_WORLD)
+		MPI_Barrier(sub_comm);
 
         timer=0.0;
         for(i=0, j= 0; i < options.iterations + options.skip ; i++) {
@@ -166,7 +170,8 @@ int main(int argc, char *argv[])
         latency = (double)(timer * 1e6) / options.iterations;
 
 #if 1
-       print_coll_iterations_perf_data(iter_time, sub_comm, (int )(size * sizeof(float)), options.iterations, &stddev, quartiles, log_file);
+       //print_coll_iterations_perf_data(iter_time, sub_comm, (int )(size * sizeof(float)), options.iterations, &stddev, quartiles, log_file);
+       calculate_stats((timer / options.iterations), sub_comm, &stddev, quartiles);
 #endif
         if (sub_rank == 0) {
             MPI_Reduce(&latency, &min_time_stats[k], 1, MPI_DOUBLE, MPI_MIN, 0,
@@ -196,6 +201,8 @@ int main(int argc, char *argv[])
 
        // print_stats_new(rank, size * sizeof(float), avg_time, min_time, max_time, stddev, quartiles);
 
+	if (sub_comm !=  MPI_COMM_WORLD)
+		MPI_Barrier(sub_comm);
         MPI_Barrier(MPI_COMM_WORLD);
     }
 
@@ -203,7 +210,7 @@ int main(int argc, char *argv[])
     for (i = 0; i < numprocs; i++) {
         if (i == rank && sub_rank == 0) {
 	    usleep(rank * 1000);
-            printf("#sub communicator #%d (start rank:%d size:%d)\n", rank / sub_numprocs, rank, sub_numprocs);
+            printf("#sub communicator #%d (start rank:%d size:%d)\n", rank % sub_numprocs, rank, sub_numprocs);
 
             k = 0;
             for (size=options.min_message_size; size*sizeof(float) <= options.max_message_size; size *= 2) {
@@ -225,7 +232,6 @@ int main(int argc, char *argv[])
     if (options.num_comms != 1) {
         MPI_Comm_free(&sub_comm);
     }
-
 
 
     free_buffer(sendbuf, options.accel);

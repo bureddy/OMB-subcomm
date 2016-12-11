@@ -595,7 +595,7 @@ print_preamble (int rank)
         fprintf(stdout, "%*s", FIELD_WIDTH, "Min Latency(us)");
         fprintf(stdout, "%*s", FIELD_WIDTH, "Max Latency(us)");
         fprintf(stdout, "%*s", FIELD_WIDTH, "STD DEV(us)");
-        fprintf(stdout, "%*s", 25, "Quartiles {Q1,Q2,Q3}");
+        fprintf(stdout, "%*s", 35, "Quartiles {Min, Q1,Q2,Q3, Max}");
         fprintf(stdout, "%*s\n", 12, "Iterations");
     }
 
@@ -1240,26 +1240,24 @@ int data_comp_func(const void * a, const void * b)
 }
 
 
-void calc_data_quatiles(double *all_iter_time, int iterations, int comm_size, double *quartiles)
+void calc_data_quatiles(double *all_iter_time, int data_count, double *quartiles)
 {
 
     double *sort_data, min_time, max_time;
-    int i, j, total_count;
+    int i, j;
 
-    sort_data = (double *) malloc(sizeof(double) * iterations * comm_size);
+    sort_data = (double *) malloc(sizeof(double) * data_count);
     if (!all_iter_time) {
 	fprintf(stderr, "Failed to allocate \n");
 	return;
     }
 
-    total_count = iterations * comm_size;
-    for (i = 0; i < iterations; i++)
-	for (j = 0; j < comm_size; j++)
-	    sort_data[i+ (j * iterations)] =  (double)(all_iter_time[i+ (j * iterations)]);
+    for (i = 0; i < data_count; i++)
+	    sort_data[i] =  (double)(all_iter_time[i]);
 
-    qsort(sort_data, (iterations * comm_size), sizeof(double), data_comp_func);
+    qsort(sort_data, data_count, sizeof(double), data_comp_func);
 
-   for (i = 1 ; i < total_count; i++) {
+   for (i = 1 ; i < data_count; i++) {
        if (sort_data[i-1] > sort_data[i]) {
 	   printf("data is not in sorting order \n");
 	   break;
@@ -1268,17 +1266,59 @@ void calc_data_quatiles(double *all_iter_time, int iterations, int comm_size, do
 
     min_time = sort_data[0] * 1e6;
     quartiles[0] = sort_data[0] * 1e6;
-    quartiles[1] = sort_data[total_count / 4] * 1e6;
-    quartiles[2] = sort_data[total_count / 2] * 1e6;
-    quartiles[3] = sort_data[total_count * 3 / 4] * 1e6;
-    quartiles[4] = sort_data[total_count-1] * 1e6;
-    max_time = sort_data[total_count-1] * 1e6;
+    quartiles[1] = sort_data[data_count / 4] * 1e6;
+    quartiles[2] = sort_data[data_count / 2] * 1e6;
+    quartiles[3] = sort_data[data_count * 3 / 4] * 1e6;
+    quartiles[4] = sort_data[data_count-1] * 1e6;
+    max_time = sort_data[data_count-1] * 1e6;
 
     //printf ("min:%4.2f  Q1: %4.2f Q2: %4.2f Q3: %4.2f max: %4.2f\n", min_time, quartiles[0], quartiles[1], quartiles[2], max_time);
 
     free(sort_data);
 }
 
+void calc_data_stddev(double *indata, int data_size, double *stddev)
+{
+    int i;
+    double average = 0.0, deviation = 0.0, devsqr_sum = 0.0, variance = 0.0;
+
+    for (i = 0; i < data_size; i++) {
+	    average += (double)(indata[i] * 1e6);
+    }
+
+    average = average/(double)(data_size);
+
+    for (i = 0; i < data_size; i++) {
+	    deviation = ((indata[i] * 1e6)- average);
+	    devsqr_sum += (deviation * deviation);
+    }
+    variance = devsqr_sum / (double)(data_size);
+
+    *stddev = sqrt(variance);
+
+}
+
+void __attribute__((unused)) calculate_stats(double latency, MPI_Comm  comm, double *stddev, double *quartiles)
+{
+    int rank, comm_size;
+    double *all_ranks_latency;
+
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &comm_size);
+
+    if (rank == 0) {
+	all_ranks_latency = ((double *) malloc(sizeof(double) *  comm_size));
+    }
+
+    MPI_Gather(&latency, 1, MPI_DOUBLE,
+              all_ranks_latency, 1, MPI_DOUBLE, 0, comm);
+
+    if (rank) return;
+
+    calc_data_stddev(all_ranks_latency, comm_size, stddev);
+    calc_data_quatiles(all_ranks_latency, comm_size, quartiles);
+
+}
 void __attribute__((unused)) print_coll_iterations_perf_data(double *iter_time, MPI_Comm comm,
                                                             int data_size, int iterations, double *stddev,
 							    double *quartiles, FILE *log_file)
@@ -1307,6 +1347,7 @@ void __attribute__((unused)) print_coll_iterations_perf_data(double *iter_time, 
 
     /* find standard deaviation */
 
+#if 0
     for (i = 0; i < iterations; i++) {
 	for (j = 0; j < comm_size; j++) {
 	    average += (double)(all_iter_time[i+ (j * iterations)] * 1e6);
@@ -1324,8 +1365,10 @@ void __attribute__((unused)) print_coll_iterations_perf_data(double *iter_time, 
     variance = devsqr_sum / (double)(iterations * comm_size);
 
     *stddev = sqrt(variance);
+#endif
+    calc_data_stddev(all_iter_time, iterations * comm_size, stddev);
 
-    calc_data_quatiles(all_iter_time, iterations, comm_size, quartiles);
+    calc_data_quatiles(all_iter_time, iterations * comm_size, quartiles);
     //printf("average :%8.4f variance :%8.4f stddev:%8.4f\n", average, variance, *stddev);
 
     if (getenv("SHOW_ALL_ITERS")) {
