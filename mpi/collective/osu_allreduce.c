@@ -15,7 +15,7 @@ int main(int argc, char *argv[])
     int i, j, numprocs, rank, size;
     double latency = 0.0, t_start = 0.0, t_stop = 0.0;
     double timer=0.0, *iter_time;
-    double avg_time = 0.0, max_time = 0.0, min_time = 0.0, stddev= 0.0, quartiles[5];
+    double avg_time = 0.0, max_time = 0.0, min_time = 0.0, stddev= 0.0, stddev1 =0.0,  quartiles[5], quartiles1[5];
     float *sendbuf, *recvbuf;
     int po_ret;
     size_t bufsize;
@@ -140,8 +140,8 @@ int main(int argc, char *argv[])
         avg_time_stats = (double *)malloc(sizeof(double) * size_loop);
         min_time_stats = (double *)malloc(sizeof(double) * size_loop);
         max_time_stats = (double *)malloc(sizeof(double) * size_loop);
-	stddev_stats = (double *)malloc(sizeof(double) * size_loop);
-	quartiles_stats = (double *)malloc(sizeof(double) * size_loop * 5);
+	stddev_stats = (double *)malloc(sizeof(double) * size_loop * 2);
+	quartiles_stats = (double *)malloc(sizeof(double) * size_loop * 10);
     }
 
     for(size=options.min_message_size; size*sizeof(float) <= options.max_message_size; size *= 2) {
@@ -170,8 +170,8 @@ int main(int argc, char *argv[])
         latency = (double)(timer * 1e6) / options.iterations;
 
 #if 1
-       //print_coll_iterations_perf_data(iter_time, sub_comm, (int )(size * sizeof(float)), options.iterations, &stddev, quartiles, log_file);
-       calculate_stats((timer / options.iterations), sub_comm, &stddev, quartiles);
+       print_coll_iterations_perf_data(iter_time, sub_comm, (int )(size * sizeof(float)), options.iterations, &stddev, quartiles, log_file);
+       calculate_stats((timer / options.iterations), sub_comm, &stddev1, quartiles1);
 #endif
         if (sub_rank == 0) {
             MPI_Reduce(&latency, &min_time_stats[k], 1, MPI_DOUBLE, MPI_MIN, 0,
@@ -181,12 +181,19 @@ int main(int argc, char *argv[])
             MPI_Reduce(&latency, &avg_time_stats[k], 1, MPI_DOUBLE, MPI_SUM, 0,
                        sub_comm);
             avg_time_stats[k] = avg_time_stats[k]/sub_numprocs;
-	    stddev_stats[k] = stddev;
-	    quartiles_stats[k*5 + 0] =  quartiles[0];
-	    quartiles_stats[k*5 + 1] =  quartiles[1];
-	    quartiles_stats[k*5 + 2] =  quartiles[2];
-	    quartiles_stats[k*5 + 3] =  quartiles[3];
-	    quartiles_stats[k*5 + 4] =  quartiles[4];
+	    stddev_stats[k*2 + 0] = stddev;
+	    stddev_stats[k*2 + 1] = stddev1;
+	    quartiles_stats[k*10 + 0] =  quartiles[0];
+	    quartiles_stats[k*10 + 1] =  quartiles[1];
+	    quartiles_stats[k*10 + 2] =  quartiles[2];
+	    quartiles_stats[k*10 + 3] =  quartiles[3];
+	    quartiles_stats[k*10 + 4] =  quartiles[4];
+
+	    quartiles_stats[k*10 + 5] =  quartiles1[0];
+	    quartiles_stats[k*10 + 6] =  quartiles1[1];
+	    quartiles_stats[k*10 + 7] =  quartiles1[2];
+	    quartiles_stats[k*10 + 8] =  quartiles1[3];
+	    quartiles_stats[k*10 + 9] =  quartiles1[4];
 
             k++;
         }
@@ -196,7 +203,7 @@ int main(int argc, char *argv[])
             MPI_Reduce(&latency, NULL, 1, MPI_DOUBLE, MPI_MAX, 0,
                        sub_comm);
             MPI_Reduce(&latency, NULL, 1, MPI_DOUBLE, MPI_SUM, 0,
-                       sub_comm);
+			       sub_comm);
         }
 
        // print_stats_new(rank, size * sizeof(float), avg_time, min_time, max_time, stddev, quartiles);
@@ -215,7 +222,7 @@ int main(int argc, char *argv[])
             k = 0;
             for (size=options.min_message_size; size*sizeof(float) <= options.max_message_size; size *= 2) {
                 print_stats_new(sub_rank, size * sizeof(float),
-                            avg_time_stats[k], min_time_stats[k], max_time_stats[k], stddev_stats[k], &quartiles_stats[k*5]);
+                            avg_time_stats[k], min_time_stats[k], max_time_stats[k], &stddev_stats[k*2], &quartiles_stats[k*10]);
                 k++;
             }
             printf("\n");

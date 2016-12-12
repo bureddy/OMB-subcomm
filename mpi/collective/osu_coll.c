@@ -596,6 +596,8 @@ print_preamble (int rank)
         fprintf(stdout, "%*s", FIELD_WIDTH, "Max Latency(us)");
         fprintf(stdout, "%*s", FIELD_WIDTH, "STD DEV(us)");
         fprintf(stdout, "%*s", 35, "Quartiles {Min, Q1,Q2,Q3, Max}");
+        fprintf(stdout, "%*s", FIELD_WIDTH, "STD DEV(us)");
+        fprintf(stdout, "%*s", 35, "Quartiles {Min, Q1,Q2,Q3, Max}");
         fprintf(stdout, "%*s\n", 12, "Iterations");
     }
 
@@ -714,7 +716,7 @@ print_stats_nbc (int rank, int size, double overall_time,
 
 void
 print_stats_new (int rank, int size, double avg_time, double min_time, double
-        max_time, double stddev, double *quartiles)
+        max_time, double *stddev, double *quartiles)
 {
     if (rank) return;
 
@@ -729,15 +731,21 @@ print_stats_new (int rank, int size, double avg_time, double min_time, double
 
     if (options.show_full) {
         //fprintf(stdout, "%*.*f%*.*f%*.*f     {%*.*f,%*.*f,%*.*f}  %*lu\n", 
-        fprintf(stdout, "%*.*f%*.*f%*.*f     {%*.*f,%*.*f,%*.*f,%*.*f,%*.*f}  %*lu\n", 
+        fprintf(stdout, "%*.*f%*.*f%*.*f     {%*.*f,%*.*f,%*.*f,%*.*f,%*.*f}  %*.*f  {%*.*f,%*.*f,%*.*f,%*.*f,%*.*f} %*lu\n",
                 FIELD_WIDTH, FLOAT_PRECISION, min_time,
                 FIELD_WIDTH, FLOAT_PRECISION, max_time,
-                FIELD_WIDTH, FLOAT_PRECISION, stddev,
+                FIELD_WIDTH, FLOAT_PRECISION, stddev[0],
 		4, 2, quartiles[0],
 		4, 2, quartiles[1],
 		4, 2, quartiles[2],
 		4, 2, quartiles[3],
 		4, 2, quartiles[4],
+                FIELD_WIDTH, FLOAT_PRECISION, stddev[1],
+		4, 2, quartiles[5],
+		4, 2, quartiles[6],
+		4, 2, quartiles[7],
+		4, 2, quartiles[8],
+		4, 2, quartiles[9],
                 12, options.iterations);
     }
 

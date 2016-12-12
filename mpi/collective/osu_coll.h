@@ -349,7 +349,7 @@ void print_version_message (int rank);
 void print_preamble (int rank);
 void print_preamble_nbc (int rank);
 void print_stats (int rank, int size, double avg, double min, double max);
-void print_stats_new(int rank, int size, double avg, double min, double max, double std_dev,double *quartiles);
+void print_stats_new(int rank, int size, double avg, double min, double max, double *std_dev,double *quartiles);
 void print_stats_nbc (int rank, int size, double ovrl, double cpu, double comm, 
 		      			  double wait, double init, double test);
 /*
