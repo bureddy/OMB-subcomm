@@ -82,26 +82,8 @@ int main(int argc, char *argv[])
         sub_comm = MPI_COMM_WORLD;
     }
     else {
-	int color;
-	if (numprocs % options.num_comms) {
-		fprintf(stderr, "all subcommuncators are not euqal size \n");
-		MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-	}
 
-#if 0
-	//MPI_Comm_split(MPI_COMM_WORLD, rank / (numprocs / options.num_comms), rank, &sub_comm);
-	MPI_Comm_split(MPI_COMM_WORLD, rank % options.num_comms, rank, &sub_comm);
-#else
-	sub_numprocs = numprocs / options.num_comms;
-	for (i = 0; i < options.num_comms; i++) {
-//		color = ((rank >= (i * sub_numprocs)) && (rank < ( (i+1) * sub_numprocs))) ? i : MPI_UNDEFINED;
-		color = (rank % options.num_comms == i) ? i : MPI_UNDEFINED;
-		MPI_Comm_split(MPI_COMM_WORLD, color, rank, &tmp_comm);
-		if (tmp_comm != MPI_COMM_NULL)
-			sub_comm = tmp_comm;
-		MPI_Barrier(MPI_COMM_WORLD);
-	}
-#endif
+	sub_comm = get_my_sub_communicator(rank, numprocs);
     }
 
     MPI_Comm_rank(sub_comm, &sub_rank);
@@ -126,7 +108,6 @@ int main(int argc, char *argv[])
        print_coll_iterations_perf_data(iter_time, sub_comm, 0, options.iterations, &stddev[0], &quartiles[0], NULL);
        calculate_stats((timer / options.iterations), sub_comm, &stddev[1], &quartiles[5]);
 
-  //  if (rank == 0) { int k= 1; while(k);}
 
     MPI_Reduce(&latency, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0,
                 sub_comm);
@@ -134,13 +115,14 @@ int main(int argc, char *argv[])
 		sub_comm);
     MPI_Reduce(&latency, &avg_time, 1, MPI_DOUBLE, MPI_SUM, 0,
                 sub_comm);
-    avg_time = avg_time/numprocs;
+    avg_time = avg_time/sub_numprocs;
 
     if (rank == 0) print_preamble(sub_rank);
+    MPI_Barrier(MPI_COMM_WORLD);
     for (i = 0; i < numprocs; i++) {
         if (i == rank && sub_rank == 0) {
 	    usleep(rank * 1000);
-            printf("#sub communicator #%d (start rank:%d size:%d)\n", rank % sub_numprocs, rank, sub_numprocs);
+            printf("#sub_communicator-#%d start_rank:%d size:%d\n", rank % sub_numprocs, rank, sub_numprocs);
 
                 print_stats_new(sub_rank, 0, avg_time, min_time, max_time,  &stddev[0], &quartiles[0]);
             printf("\n");

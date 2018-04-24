@@ -95,6 +95,7 @@ static void print_data (int rank, int full, int size, double avg_time, double
 static void print_data_nbc (int rank, int full, int size, double ovrl, double
         cpu, double comm, double wait, double init, int iterations);
 
+MPI_Comm get_my_sub_communicator(int rank, int numprocs);
 void
 calculate_and_print_stats(int rank, int size, int numprocs,
                           double timer, double latency,
@@ -317,6 +318,7 @@ struct options_t {
     int num_probes;
     int device_array_size;
     int num_comms;
+    int ppn;
 };
 
 extern struct options_t options;

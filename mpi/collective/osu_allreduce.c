@@ -106,26 +106,7 @@ int main(int argc, char *argv[])
         sub_comm = MPI_COMM_WORLD;
     }
     else {
-	int color;
-	if (numprocs % options.num_comms) {
-		fprintf(stderr, "all subcommuncators are not euqal size \n");
-		MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-	}
-
-#if 0
-	//MPI_Comm_split(MPI_COMM_WORLD, rank / (numprocs / options.num_comms), rank, &sub_comm);
-	MPI_Comm_split(MPI_COMM_WORLD, rank % options.num_comms, rank, &sub_comm);
-#else
-	sub_numprocs = numprocs / options.num_comms;
-	for (i = 0; i < options.num_comms; i++) {
-//		color = ((rank >= (i * sub_numprocs)) && (rank < ( (i+1) * sub_numprocs))) ? i : MPI_UNDEFINED;
-		color = (rank % options.num_comms == i) ? i : MPI_UNDEFINED;
-		MPI_Comm_split(MPI_COMM_WORLD, color, rank, &tmp_comm);
-		if (tmp_comm != MPI_COMM_NULL)
-			sub_comm = tmp_comm;
-		MPI_Barrier(MPI_COMM_WORLD);
-	}
-#endif
+	    sub_comm = get_my_sub_communicator(rank, numprocs);
     }
 
     MPI_Comm_rank(sub_comm, &sub_rank);

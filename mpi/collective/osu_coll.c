@@ -152,13 +152,13 @@ set_num_comms (int value)
     }
 
     /* judge power of two */
-    temp = value;
+  /*  temp = value;
     while (((temp % 2) == 0) && temp > 1)
         temp /= 2;
 
     if (temp != 1)
         return -1;
-
+*/
     options.num_comms = value;
 
     return 0;
@@ -226,12 +226,12 @@ process_options (int argc, char *argv[])
     extern char * optarg;
     extern int optind, optopt;
 
-    char const * optstring = "+:hvfm:i:x:M:t:s:c:";
+    char const * optstring = "+:hvfm:i:x:M:t:s:c:p:";
     int c;
 
     if (accel_enabled) {
-        optstring = (CUDA_KERNEL_ENABLED) ? "+:d:hvfm:i:x:M:t:r:s:c:"
-            : "+:d:hvfm:i:x:M:t:s:c:";
+        optstring = (CUDA_KERNEL_ENABLED) ? "+:d:hvfm:i:x:M:t:r:s:c:p:"
+            : "+:d:hvfm:i:x:M:t:s:c:p:";
     }
 
     /*
@@ -251,6 +251,7 @@ process_options (int argc, char *argv[])
     options.skip = 200;
     options.skip_large = 10;
     options.num_comms = MIN_NUM_COMMS;
+    options.ppn = 1;
 
     while ((c = getopt(argc, argv, optstring)) != -1) {
         bad_usage.opt = c;
@@ -386,6 +387,9 @@ process_options (int argc, char *argv[])
                     return po_bad_usage;
                 }
                 break;
+            case 'p':
+		options.ppn = atoi(optarg);
+		break;
             case ':':
                 bad_usage.message = "Option Missing Required Argument";
                 bad_usage.opt = optopt;
@@ -1457,6 +1461,39 @@ fn_fail:
     free(str);
     free(max_cutoffs);
     free(sum_time);
+}
+
+MPI_Comm get_my_sub_communicator(int rank, int numprocs) {
+    int color;
+    MPI_Comm sub_comm, tmp_comm;
+    int i, sub_numprocs;
+#if 0
+	if (numprocs % options.num_comms) {
+		fprintf(stderr, "all subcommuncators are not euqal size \n");
+		MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+	}
+#endif
+
+#if 0
+	//MPI_Comm_split(MPI_COMM_WORLD, rank / (numprocs / options.num_comms), rank, &sub_comm);
+	MPI_Comm_split(MPI_COMM_WORLD, rank % options.num_comms, rank, &sub_comm);
+#else
+	sub_numprocs = numprocs / options.num_comms;
+	for (i = 0; i < options.num_comms; i++) {
+//		color = ((rank >= (i * sub_numprocs)) && (rank < ( (i+1) * sub_numprocs))) ? i : MPI_UNDEFINED;
+		color = ((rank/options.ppn) % options.num_comms == i) ? i : MPI_UNDEFINED;
+		MPI_Comm_split(MPI_COMM_WORLD, color, rank, &tmp_comm);
+		if (tmp_comm != MPI_COMM_NULL) {
+			sub_comm = tmp_comm;
+		//	printf("rank:%d - %d\n",rank, i);
+		}
+		MPI_Barrier(MPI_COMM_WORLD);
+	}
+#endif
+
+    return sub_comm;
+
+
 }
 
 
