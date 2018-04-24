@@ -151,14 +151,6 @@ set_num_comms (int value)
         return -1;
     }
 
-    /* judge power of two */
-  /*  temp = value;
-    while (((temp % 2) == 0) && temp > 1)
-        temp /= 2;
-
-    if (temp != 1)
-        return -1;
-*/
     options.num_comms = value;
 
     return 0;
@@ -388,7 +380,7 @@ process_options (int argc, char *argv[])
                 }
                 break;
             case 'p':
-		options.ppn = atoi(optarg);
+		            options.ppn = atoi(optarg);
 		break;
             case ':':
                 bad_usage.message = "Option Missing Required Argument";
@@ -458,6 +450,7 @@ print_help_message (int rank)
 
     printf("  -c COMMS      set the number of communicators used in collectives.\n");
     printf("                value must be power of 2. minimum is %d (default), maximum is %d.\n", MIN_NUM_COMMS, MAX_NUM_COMMS);
+    printf("  -p PPN        Process per node running (default 1)\n");
 
     if (CUDA_KERNEL_ENABLED) {
         printf("  -r TARGET     set the compute target for dummy computation\n");
